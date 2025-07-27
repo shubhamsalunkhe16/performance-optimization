@@ -1,181 +1,85 @@
 ## 🚀 React Performance Optimization
 
-### 1. **Avoid Unnecessary Renders**
+| **Technique**                        | **How It Works**                                                                              | **Example**                                                                                         |
+| ------------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **`React.memo`**                     | Memoizes **functional components** to prevent re-renders when props don’t change.             | `export default React.memo(MyComponent);`                                                           |
+| **`useMemo`**                        | Caches **expensive calculations** to avoid recomputation on each render.                      | `const result = useMemo(() => compute(data), [data]);`                                              |
+| **`useCallback`**                    | Memoizes **functions** to prevent new references on every render.                             | `const handleClick = useCallback(() => setCount(c+1), [c]);`                                        |
+| **Cleanup in `useEffect`**           | Free up **event listeners, timers, subscriptions** when components unmount.                   | `useEffect(() => { const id = setInterval(...); return () => clearInterval(id); }, []);`            |
+| **Axios Request Cancellation**       | Prevents **memory leaks** by aborting API requests when components unmount.                   | `const ctrl = new AbortController(); axios.get(url,{signal:ctrl.signal}); return ()=>ctrl.abort();` |
+| **Event Delegation**                 | Attach **one listener** to a parent instead of multiple children → reduces DOM overhead.      | `parent.addEventListener('click', e => { if(e.target.matches('button')) {...} });`                  |
+| **Avoid Inline Functions**           | Prevents **new function references** inside JSX on every render.                              | Move handlers outside JSX or use `useCallback`.                                                     |
+| **State Management Optimization**    | Store **derived values in `useMemo`**, avoid **deep nested state** causing re-renders.        | `const filtered = useMemo(() => filter(data), [data]);`                                             |
+| **Split Large Components**           | Divide **large components** into smaller ones to isolate re-renders.                          | `Header`, `Sidebar`, `Content` separately.                                                          |
+| **Code Splitting & Lazy Loading**    | Load heavy components **only when needed** using `React.lazy` & `Suspense`.                   | `const LazyComp = React.lazy(() => import('./Comp'));`                                              |
+| **Virtualization for Lists**         | Renders **only visible rows** in large datasets using **react-window**/**react-virtualized**. | `<FixedSizeList height={300} itemCount={1000} />`                                                   |
+| **Stable Keys in Lists**             | Use **unique IDs** instead of array indices to prevent re-mounting unchanged items.           | `<li key={item.id}>{item.name}</li>`                                                                |
+| **Throttling & Debouncing**          | Reduce **excessive re-renders** for events like scroll, resize, or search.                    | `const debounced = debounce(fn, 300);`                                                              |
+| **Context Splitting**                | Use **multiple contexts** or **use-context-selector** to avoid unnecessary child updates.     | `import { useContextSelector } from 'use-context-selector';`                                        |
+| **Profiler API**                     | Analyze **render timings** to detect bottlenecks.                                             | `<Profiler id="App" onRender={callback} />`                                                         |
+| **Production Build**                 | Use `npm run build` to get **tree-shaking, minification, and React optimizations**.           | Deploy optimized build.                                                                             |
+| **Immutable State Updates**          | Avoid mutating state directly → enables React’s diffing algorithm to work efficiently.        | `setItems([...items, newItem]);`                                                                    |
+| **useTransition / useDeferredValue** | Optimize **concurrent rendering** for input-heavy UIs.                                        | `const [isPending, startTransition] = useTransition();`                                             |
+| **Web Workers for Heavy Tasks**      | Move **CPU-intensive tasks** off the main thread for a smoother UI.                           | Use `workerize` or `Web Workers`.                                                                   |
 
-- Use `React.memo` to memoize functional components.
-- Use `useCallback` to memoize functions.
-- Use `useMemo` for expensive calculations.
-- Use a custom `areEqual` function in `React.memo` to compare non-primitive props.
+```jsx
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from "react";
+import axios from "axios";
+import { FixedSizeList as List } from "react-window"; // Virtualized list
+import debounce from "lodash.debounce"; // Debouncing
 
-### 2. **Split Components Logically**
+const LazyComp = React.lazy(() => import("./HeavyComponent")); // Code splitting (lazy loading)
 
-- `Break components into smaller`, self-contained units.
-- Only re-render child components if their specific props change.
+const App = React.memo(() => { // React.memo prevents re-renders when props don't change
+  const [data, setData] = useState<number[]>([]);
+  const [query, setQuery] = useState("");
 
-### 3. **Use `key` Properly in Lists**
-
-- Always use a **stable unique `key`**.
-- Avoid using `index` as a key unless the list is static.
-
-### 4. **Code Splitting**
-
-- Use `React.lazy` and `Suspense` to load components only when needed.
-
-```tsx
-const Profile = React.lazy(() => import("./Profile"));
-```
-
-### 5. **Virtualization**
-
-- For large lists or tables, use libraries like:
-
-  - `react-window`
-  - `react-virtualized`
-
-- Only render items that are in the viewport.
-
-### 6. **Optimize Context Usage**
-
-- Avoid storing frequently changing values in context.
-- Split contexts: one for static config, one for dynamic state.
-
-### 7. **Throttle or Debounce Expensive Actions**
-
-- Example: Search input → debounce API call to avoid every keystroke making a request.
-- Use `lodash.debounce` or `use-debounce` hook.
-
-### 8. **Using Web Workers for Heavy Tasks**
-
-### ✅ What are Web Workers?
-
-Web Workers run scripts in **background threads**, separate from the **main UI thread**, preventing UI freezes for CPU-heavy tasks like:
-
-- Large JSON processing
-- Data encryption/decryption
-- Image manipulation
-- Complex math calculations
-
----
-
-### 🛠️ Real-Life Use Case Example: Large JSON Parsing in Web Worker
-
-> Imagine you're fetching and parsing a large JSON file (e.g., 100MB+ analytics data).
-
-### 📁 File Structure
-
-```
-src/
-├── workers/
-│   └── jsonParser.ts
-├── App.tsx
-```
-
-### 🔧 `jsonParser.ts` (Worker File)
-
-```ts
-// src/workers/jsonParser.ts
-self.onmessage = async (event) => {
-  const jsonString = event.data;
-  const data = JSON.parse(jsonString);
-  self.postMessage(data); // send parsed data back
-};
-
-export {};
-```
-
-### ⚙️ Vite Config (to support worker imports)
-
-```ts
-// vite.config.ts
-export default defineConfig({
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: undefined, // allows web worker chunking
-      },
-    },
-  },
-});
-```
-
-### 🧩 Using the Worker in React (`App.tsx`)
-
-```tsx
-import { useEffect, useState } from "react";
-
-// @ts-ignore
-import Worker from "./workers/jsonParser?worker";
-
-function App() {
-  const [data, setData] = useState(null);
-
+  // Fetch with cleanup + AbortController to prevent memory leaks
   useEffect(() => {
-    const worker = new Worker();
-
-    fetch("/huge-data.json")
-      .then((res) => res.text())
-      .then((jsonString) => {
-        worker.postMessage(jsonString);
-      });
-
-    worker.onmessage = (event) => {
-      setData(event.data); // parsed JSON
-    };
-
-    return () => {
-      worker.terminate();
-    };
+    const controller = new AbortController();
+    axios.get("/api/data", { signal: controller.signal })
+      .then(res => setData(res.data))
+      .catch(err => axios.isCancel(err) && console.log("Cancelled"));
+    return () => controller.abort(); // Cleanup
   }, []);
 
-  return (
-    <div>
-      <h1>Loaded Data: {data ? "✔️" : "⏳"}</h1>
-    </div>
+  // Debounced search to reduce frequent re-renders
+  const handleSearch = useCallback(
+    debounce((val: string) => setQuery(val), 300),
+    []
   );
-}
 
-export default App;
-```
+  // Event delegation (click handling on parent instead of multiple children)
+  const handleListClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const item = (e.target as HTMLElement).closest("[data-item]");
+    if (item) console.log("Clicked:", item.getAttribute("data-item"));
+  }, []);
 
----
-
-### 9. **Dynamic Import of Heavy Components**
-
-### ✅ Why Use It?
-
-If a component is:
-
-- Large (heavy graphs, charts, maps)
-- Used conditionally (modals, reports, visualizations)
-- Below the fold
-
-➡️ Dynamically load it **only when needed**.
-
----
-
-### 🧩 Example: Dynamically Load a Heavy Chart Component
-
-```tsx
-import React, { Suspense, useState } from "react";
-
-// Lazy load the chart
-const HeavyChart = React.lazy(() => import("./components/HeavyChart"));
-
-function App() {
-  const [showChart, setShowChart] = useState(false);
+  // Memoized filtered data
+  const filtered = useMemo(() => data.filter(d => d.toString().includes(query)), [data, query]);
 
   return (
     <div>
-      <button onClick={() => setShowChart(true)}>Load Chart</button>
+      <input type="text" placeholder="Search..." onChange={(e) => handleSearch(e.target.value)} />
 
-      {showChart && (
-        <Suspense fallback={<p>Loading Chart...</p>}>
-          <HeavyChart />
-        </Suspense>
-      )}
+      {/* Virtualized list (renders only visible items) */}
+      <div onClick={handleListClick}>
+        <List height={200} itemCount={filtered.length} itemSize={30} width={300}>
+          {({ index, style }) => (
+            <div style={style} data-item={filtered[index]} key={filtered[index]}>
+              {filtered[index]} {/* Stable key instead of index */}
+            </div>
+          )}
+        </List>
+      </div>
+
+      {/* Lazy-loaded component */}
+      <Suspense fallback={<div>Loading heavy stuff...</div>}>
+        <LazyComp />
+      </Suspense>
     </div>
   );
-}
+});
 
 export default App;
 ```
@@ -184,291 +88,97 @@ export default App;
 
 ## 🧠 JavaScript Performance Optimization
 
-### 1. **Minimize DOM Manipulations**
-
-- Accessing and changing the DOM is expensive.
-- Use virtual DOM (React), and batch updates when possible.
-
-### 2. **Efficient Loops and Iteration**
-
-- Prefer `for` loops or `for-of` for performance-sensitive iterations.
-- Avoid nested loops if possible.
-
-### 3. **Avoid Memory Leaks**
-
-- Clean up intervals, timeouts, and subscriptions in `useEffect`.
-- Detach event listeners when components unmount.
-
-```tsx
-useEffect(() => {
-  const handler = () => {};
-  window.addEventListener("resize", handler);
-  return () => window.removeEventListener("resize", handler);
-}, []);
-```
-
-### 4. **Avoid Global Variables**
-
-- Leads to memory bloat and unintentional overwrites.
-
-### 5. **Use Web Workers for Heavy Tasks**
-
-- Offload heavy tasks (e.g., parsing large files) to a Web Worker.
-
----
-
-## 🔹 1. Optimize JavaScript Files
-
-- Optimizing assets, CSS, and JavaScript is crucial for **faster page load times**, **better SEO**, and **lower bandwidth consumption**
-
-### ✅ Use Tree Shaking
-
-- Removes **unused exports** from your code.
-- Only works with ES modules (`import/export`).
-- Make sure your libraries also support tree-shaking.
-
-```js
-// GOOD
-import { debounce } from "lodash-es"; // tree-shakable
-
-// BAD
-import _ from "lodash"; // pulls in the whole library
-```
-
-### ✅ Minify and Compress
-
-- Use tools like **Terser**, **esbuild**, or **UglifyJS** to minify JS.
-- Use **Gzip** or **Brotli** compression on the server side.
-
-### ✅ Code Splitting
-
-- Dynamically load chunks based on the route or interaction.
-- React Example:
-
-```tsx
-const Profile = React.lazy(() => import("./Profile"));
-```
-
-### ✅ Lazy Load JS Modules
-
-- Load non-critical scripts after page load.
-- Example in `<script>` tag:
-
-```html
-<script src="heavy-script.js" defer></script>
-```
+| **Technique**                     | **How It Works**                                                                  | **Example**                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Debouncing & Throttling**       | Limits **frequency of function calls** for events like scroll, resize, input.     | `debounce(fn,300)` / `throttle(fn,500)`                                      |
+| **Avoid Blocking Code**           | Split **long tasks** using `setTimeout`, `requestIdleCallback`, or Web Workers.   | `setTimeout(() => heavyTask(), 0);`                                          |
+| **Web Workers**                   | Offload **CPU-heavy tasks** to background threads, freeing the main thread.       | `new Worker("worker.js");`                                                   |
+| **Lazy Loading**                  | Load **scripts, images, and modules on demand** to reduce initial load time.      | `import('./module.js')`                                                      |
+| **Code Splitting**                | Break JS into **smaller chunks** loaded when needed (via Webpack/Dynamic Import). | `import("./feature")`                                                        |
+| **Minification & Compression**    | Remove unused code, whitespace, and compress JS with Gzip/Brotli.                 | Webpack `TerserPlugin`, `gzip`                                               |
+| **Tree Shaking**                  | Eliminate **dead code** (unused exports) during bundling.                         | `import { needed } from 'lib';`                                              |
+| **DOM Manipulation Optimization** | Batch DOM updates & use **DocumentFragment** instead of frequent reflows.         | `frag.append(...nodes); parent.append(frag);`                                |
+| **Event Delegation**              | Attach **one event listener** to a parent instead of multiple children.           | `parent.addEventListener("click", e => { if(e.target.matches('li')) ... });` |
+| **Minimize Repaints/Reflows**     | Group **style changes**, use `classList`, avoid layout thrashing (`offsetWidth`). | `el.classList.add('active')`                                                 |
+| **Use requestAnimationFrame**     | Schedule animations to sync with browser's paint cycle for smoother UI.           | `requestAnimationFrame(() => updatePosition());`                             |
+| **Prefetching & Preloading**      | Load **resources in advance** when network is idle.                               | `<link rel="prefetch" href="page.js" />`                                     |
+| **Reduce Memory Leaks**           | Remove **event listeners**, **clear intervals**, avoid unreferenced closures.     | `window.removeEventListener("scroll", handler);`                             |
+| **Avoid Global Variables**        | Minimize **pollution of global scope** to prevent memory conflicts.               | Use `const/let` & modules.                                                   |
+| **Use Efficient Data Structures** | Use **Map/Set** for lookups, avoid O(n) operations for large data.                | `const set = new Set(arr);`                                                  |
+| **Short-Circuiting & Ternary**    | Use logical operators for **faster conditional evaluation**.                      | `const val = a && b;`                                                        |
+| **Batch API Requests**            | Combine multiple requests or use **Promise.all** to reduce network latency.       | `await Promise.all([fetch1(), fetch2()]);`                                   |
+| **CDN & Caching**                 | Serve JS from **CDNs** and use browser caching (Cache-Control headers).           | `<script src="cdn.com/lib.js">`                                              |
+| **Profiling & Monitoring**        | Use **DevTools Performance tab** & `performance.now()` to measure bottlenecks.    | `console.time('fn'); fn(); console.timeEnd('fn');`                           |
 
 ---
 
 ## 🔹 2. Optimize CSS Files
 
-### ✅ Remove Unused CSS
-
-- Use tools like:
-
-  - [`purgecss`](https://purgecss.com/)
-  - [`@fullhuman/postcss-purgecss`](https://github.com/FullHuman/postcss-purgecss)
-  - Tailwind CSS built-in `content` scanning.
-
-```js
-// Tailwind config
-content: ["./src/**/*.{js,jsx,ts,tsx,html}"],
-```
-
-### ✅ Minify CSS
-
-- Use PostCSS, CSSNano, or CleanCSS.
-- Frameworks like Vite, Next.js, and CRA handle this in production by default.
-
-### ✅ Use Critical CSS
-
-- Inline above-the-fold CSS for faster first render.
-- Tools: `critters` (Next.js uses it), or manually extract critical styles.
-
-### ✅ Use CSS Modules or CSS-in-JS
-
-- Avoid global scope pollution.
-- Helps in tree-shaking and code splitting.
-
-```tsx
-import styles from "./Button.module.css";
-```
+| **Technique**                          | **How It Works**                                                             | **Example**                                                                        |
+| -------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **Minification**                       | Removes **whitespace, comments, and unused code** to reduce file size.       | Use `cssnano` or `clean-css`.                                                      |
+| **Remove Unused CSS (Tree Shaking)**   | Eliminate **unused selectors** to reduce CSS bloat.                          | Use **PurgeCSS** or Tailwind’s `purge` option.                                     |
+| **Combine CSS Files**                  | Merge multiple CSS files to **reduce HTTP requests**.                        | Combine via Webpack/PostCSS.                                                       |
+| **Use CSS Preprocessors**              | Use **SASS/LESS** for variables, nesting & cleaner modular CSS.              | `@use "variables";`                                                                |
+| **Use CSS Variables**                  | Reduce repetition by using **custom properties** for reusable values.        | `--primary-color: #333; color: var(--primary-color);`                              |
+| **Critical CSS**                       | Inline **above-the-fold CSS** to speed up initial page load.                 | Tools: **Critical**, **Penthouse**                                                 |
+| **Load CSS Asynchronously**            | Prevent **render-blocking** by loading non-critical CSS with `media` or JS.  | `<link rel="stylesheet" href="style.css" media="print" onload="this.media='all'">` |
+| **Use Content Delivery Network (CDN)** | Serve CSS via a **fast CDN** for better caching & lower latency.             | `<link rel="stylesheet" href="https://cdn...">`                                    |
+| **Enable Gzip/Brotli Compression**     | Compress CSS files at the server level for **faster delivery**.              | Configure **NGINX/Apache**.                                                        |
+| **Use Scoped CSS**                     | Limit CSS to **specific components** (like CSS Modules) to prevent bloat.    | `Button.module.css` in React.                                                      |
+| **Avoid !important Overuse**           | Use **specific selectors** instead of `!important` to keep CSS maintainable. | Use BEM naming convention.                                                         |
+| **Lazy Load Non-Critical CSS**         | Load **theme or page-specific CSS only when needed**.                        | Dynamic import in React: `import('./theme.css')`.                                  |
 
 ---
 
 ## 🔹 3. Optimize Images and Media Assets
 
-### ✅ Use Modern Formats
-
-- Use **WebP**, **AVIF**, or **SVG** over JPG/PNG where possible.
-
-### ✅ Compress Images
-
-- Tools: [TinyPNG](https://tinypng.com), [ImageOptim](https://imageoptim.com), or CLI tools like `sharp`.
-
-### ✅ Lazy Load Images
-
-- Defer offscreen images using:
-
-```html
-<img src="photo.webp" loading="lazy" />
-```
-
-Or use React libraries like `react-lazyload`, `next/image`.
+| **Technique**                      | **How It Works**                                                            | **Example / Tools**                                                                         |
+| ---------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Use Modern Formats**             | Replace heavy formats with **WebP**, **AVIF**, or **SVG** for smaller size. | Convert with **Squoosh**, **Sharp**                                                         |
+| **Responsive Images**              | Serve images at **different resolutions** for different screen sizes.       | `<img srcset="img-480.jpg 480w, img-800.jpg 800w" sizes="(max-width: 600px) 480px, 800px">` |
+| **Lazy Loading**                   | Delay **off-screen image/video loading** until they are visible.            | `<img src="image.jpg" loading="lazy" />`                                                    |
+| **Compress Images**                | Reduce file size without visible quality loss.                              | **ImageOptim**, **TinyPNG**, **Sharp**                                                      |
+| **Use SVG for Icons/Graphics**     | Replace PNG/JPG icons with **SVG** for scalability & smaller size.          | `<svg>...</svg>`                                                                            |
+| **Sprite Sheets**                  | Combine multiple small icons into **one image** to reduce HTTP requests.    | CSS sprites via **SpriteSmith**                                                             |
+| **Content Delivery Network (CDN)** | Deliver media via a **CDN** for caching & faster global loading.            | Cloudflare, CloudFront                                                                      |
+| **Preload Critical Images**        | **Preload above-the-fold images** for faster first paint.                   | `<link rel="preload" as="image" href="hero.jpg">`                                           |
+| **Use Picture Element**            | Provide **multiple formats** & resolutions for browsers to choose best fit. | `<picture><source srcset="img.avif" type="image/avif"><img src="fallback.jpg"></picture>`   |
+| **Adaptive Streaming for Videos**  | Use **HLS/DASH** streaming for large videos to deliver based on bandwidth.  | Use **Mux**, **Cloudinary**                                                                 |
+| **Reduce Animated GIFs**           | Replace GIFs with **MP4/WebM** for smaller size and better performance.     | `<video autoplay loop muted><source src="anim.mp4"></video>`                                |
+| **Cache & Versioning**             | Use **cache-busting** and **long-term caching** for static assets.          | `image.[hash].webp`                                                                         |
+| **Defer Non-Critical Media**       | Load background/media assets **after main content** renders.                | JS lazy import.                                                                             |
 
 ---
 
 ## 🔹 4. Fonts Optimization
 
-### ✅ Use Font Subsetting
-
-- Only include characters you use.
-- Tools: [glyphhanger](https://github.com/filamentgroup/glyphhanger)
-
-### ✅ Use `font-display: swap`
-
-- Shows fallback text immediately while custom font loads.
-
-```css
-@font-face {
-  font-family: "MyFont";
-  src: url("myfont.woff2") format("woff2");
-  font-display: swap;
-}
-```
+| **Technique**                    | **How It Works**                                                             | **Example / Tools**                                                              |
+| -------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Use Modern Formats**           | Serve fonts in **WOFF2** (smaller, faster) instead of TTF/OTF.               | Convert via **Font Squirrel** / **Google Fonts**                                 |
+| **Subset Fonts**                 | Include **only required characters** (e.g., Latin only) to reduce file size. | Use **glyphhanger**, **subset-font**                                             |
+| **Preload Key Fonts**            | **Preload above-the-fold fonts** for faster rendering.                       | `<link rel="preload" as="font" href="font.woff2" type="font/woff2" crossorigin>` |
+| **Use `font-display: swap`**     | Display **fallback text** immediately while the custom font loads.           | `@font-face { font-display: swap; }`                                             |
+| **Limit Font Weights & Styles**  | Use **fewer variants** (e.g., only regular & bold) to reduce HTTP requests.  | Use only essential `400`, `700`.                                                 |
+| **Host Fonts Locally**           | Serve fonts from **your server/CDN** for better caching & control.           | Self-hosted Google Fonts.                                                        |
+| **Variable Fonts**               | Use **one font file for multiple weights/styles**, reducing file count.      | `font-variation-settings: "wght" 400;`                                           |
+| **Lazy Load Non-Critical Fonts** | Load **non-essential fonts** after page render.                              | `document.fonts.load('1em MyFont');`                                             |
+| **Avoid Base64-Embedded Fonts**  | Don’t inline large fonts in CSS; use external files for caching.             | `<link rel="stylesheet" href="fonts.css" />`                                     |
+| **Cache Fonts**                  | Set **long-term caching** headers for font files.                            | `Cache-Control: max-age=31536000`                                                |
 
 ---
 
-## 🔹 5. Use CDN for Static Assets
+## 5. Caching Optimization (In-Depth)
 
-- Host assets (JS, CSS, fonts, images) on a **CDN** to:
-
-  - Reduce latency
-  - Improve caching
-  - Avoid blocking on origin server
-
-Popular CDNs:
-
-- Cloudflare
-- jsDelivr
-- Google CDN (fonts)
-
----
-
-## 🔹 6. Cache Strategically
-
-### ✅ Enable Browser Caching
-
-- Set headers like `Cache-Control`, `ETag`, and `Expires`.
-
-```http
-Cache-Control: public, max-age=31536000, immutable
-```
-
-### ✅ Use Long-Term Hashing
-
-- File name includes a content hash:
-
-  ```bash
-  main.3fj23f.js
-  style.af83j9.css
-  ```
-
-- Ensures users get the latest file only when contents change.
-
----
-
-## 🔹 7. Bundle Analysis
-
-Use tools to find and fix oversized files:
-
-- **Webpack Bundle Analyzer**
-- **Source Map Explorer**
-- **Vite Plugin Visualizer**
-- **Next.js Analyzer**
-
----
-
-## ✅ Summary Checklist
-
-| Optimization Target | Techniques                                 |
-| ------------------- | ------------------------------------------ |
-| **JS**              | Tree shaking, code splitting, minification |
-| **CSS**             | Purging, minifying, using critical CSS     |
-| **Images**          | WebP/AVIF, compression, lazy loading       |
-| **Fonts**           | Subsetting, `font-display: swap`           |
-| **Caching**         | Cache-Control, hashed file names           |
-| **Delivery**        | Use CDN, defer non-critical assets         |
-
----
-
-## 🛠️ Build-Time & Deployment Optimization
-
-### 1. **Tree Shaking**
-
-- Removes unused code during bundling (supported in ES Modules).
-- Ensure you're using modern imports (`import { x } from 'lib'`).
-
-```jsx
-// GOOD
-import { debounce } from "lodash-es"; // tree-shakable
-
-// BAD
-import _ from "lodash"; // pulls in the whole library
-```
-
-### 2. **Minify and Compress**
-
-- Use `Terser`, `UglifyJS`, or similar to minify JS.
-- Gzip or Brotli for delivery.
-
-### 3. **Lazy Load Images and Assets**
-
-- Use `loading="lazy"` for images.
-- Dynamically import less-used assets/components.
-
----
-
-## 📊 Developer Tools
-
-### 1. **React Developer Tools**
-
-- Inspect component tree and check which props cause re-renders.
-- Highlight unnecessary renders.
-
-### 2. **Profiler**
-
-- Use React Profiler to measure performance bottlenecks in component rendering.
-
-### 3. **Lighthouse**
-
-- Run audits on performance, accessibility, and best practices.
-
----
-
-## 🧪 Real-World Tips
-
-| Issue                          | Solution                               |
-| ------------------------------ | -------------------------------------- |
-| Re-render on every keystroke   | Debounce or throttle input handler     |
-| Sluggish scroll in large lists | Use virtualization                     |
-| Laggy app on mobile            | Reduce bundle size, use lazy loading   |
-| Large re-renders due to props  | Memoize children or lift state smartly |
-
----
-
-## 🔁 Bonus: Performance Patterns in React
-
-### ✅ Container-Presenter Pattern
-
-- Separate logic-heavy containers from UI-only presentational components.
-
-### ✅ Lifting State Wisely
-
-- Only lift state up when absolutely needed. Excessive lifting increases re-renders.
-
-### ✅ Batch State Updates
-
-- React batches `setState()` calls automatically in event handlers. Use `flushSync` in edge cases.
-
----
+| **Type**                                  | **How It Works**                                                                    | **Example / Tools**                                       |
+| ----------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **Browser Caching**                       | Store static assets (CSS, JS, images, fonts) in the browser for **faster reloads**. | `Cache-Control: max-age=31536000`                         |
+| **HTTP Caching (Headers)**                | Use **ETags**, `Last-Modified`, `Cache-Control` to validate/reuse responses.        | `Cache-Control: public, max-age=86400`                    |
+| **Service Worker Caching (PWA)**          | Cache assets & API responses for **offline support** & **instant loads**.           | `caches.open('v1').put(url, response)`                    |
+| **CDN Caching**                           | Deliver assets via a **CDN** with edge caching to reduce latency.                   | Cloudflare, AWS CloudFront                                |
+| **API Response Caching**                  | Cache **frequent API calls** in localStorage, IndexedDB, or service workers.        | `localStorage.setItem('data', JSON.stringify(response));` |
+| **In-Memory Caching**                     | Store frequently used data in memory (JS object/Map) for **fast retrieval**.        | `const cache = new Map(); cache.set(key, value);`         |
+| **Database Query Caching**                | Store **query results** to reduce DB load & response time.                          | Redis, Memcached                                          |
+| **Static Site Generation (SSG)**          | Pre-render pages at build time to serve cached static HTML.                         | Next.js `getStaticProps()`                                |
+| **Revalidation (Stale-While-Revalidate)** | Serve **stale data instantly** while fetching fresh data in background.             | `Cache-Control: stale-while-revalidate=60`                |
+| **Bundle Caching with Versioning**        | Use **hashed filenames** to enable long-term caching & avoid stale files.           | `app.[hash].js`                                           |
